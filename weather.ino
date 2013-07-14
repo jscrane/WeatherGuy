@@ -17,14 +17,16 @@
 #define TFT_RST  -1
 #define TFT_LED  6
 
-byte Ethernet::buffer[567];  // minimum buffer size to avoid losing data
-static uint32_t next_fetch, last_fetch;
+byte Ethernet::buffer[600];  // 567 is minimum buffer size to avoid losing data
+static uint32_t next_fetch, bright_on;
 
 char website[] PROGMEM = "weather.yahooapis.com";
 
 byte xmlbuf[80];
 TinyXML xml;
 
+#define DIM 230
+#define BRIGHT 0
 Adafruit_ST7735 tft(TFT_CS, TFT_RS, TFT_RST);
 
 #define IN_LOCATION 1
@@ -96,8 +98,11 @@ void bmp_draw(char *filename, uint8_t x, uint8_t y) {
   Serial.print(F("Image Offset: ")); 
   Serial.println(bmpImageoffset, DEC);
   // Read DIB header
+  uint32_t header_size = read32(currPos);
+#ifdef DEBUG
   Serial.print(F("Header size: ")); 
-  Serial.println(read32(currPos));
+  Serial.println(header_size);
+#endif
   bmpWidth  = read32(currPos);
   bmpHeight = read32(currPos);
   if (read16(currPos) != 1) {
@@ -105,18 +110,22 @@ void bmp_draw(char *filename, uint8_t x, uint8_t y) {
     return;
   }
   bmpDepth = read16(currPos); // bits per pixel
+#ifdef DEBUG
   Serial.print(F("Bit Depth: ")); 
   Serial.println(bmpDepth);
+#endif
   if((bmpDepth != 24) || (read32(currPos) != 0)) {
     // 0 = uncompressed
     Serial.println(F("BMP format not recognized."));
     return;
   }
   
+#ifdef DEBUG
   Serial.print(F("Image size: "));
   Serial.print(bmpWidth);
   Serial.print('x');
   Serial.println(bmpHeight);
+#endif
   
   // BMP rows are padded (if needed) to 4-byte boundary
   rowSize = (bmpWidth * 3 + 3) & ~3;
@@ -166,15 +175,17 @@ void bmp_draw(char *filename, uint8_t x, uint8_t y) {
       }
   
       // Convert pixel from BMP to TFT format, push to display
-      r = sdbuffer[buffidx++];
-      g = sdbuffer[buffidx++];
       b = sdbuffer[buffidx++];
+      g = sdbuffer[buffidx++];
+      r = sdbuffer[buffidx++];
       tft.pushColor(tft.Color565(r,g,b));
     } // end pixel
   }
+#ifdef DEBUG
   Serial.print(F("Loaded in "));
   Serial.print(millis() - startTime);
   Serial.println(F(" ms"));
+#endif
 }
 
 // These read 16- and 32-bit types from the SD card file.
@@ -219,6 +230,12 @@ static void update_display() {
 
   bmp_draw(condition_code, 54, 38);  
   tft.setTextSize(1);
+
+  if (condition_temp != wind_chill) {
+    tft.setCursor(0, 16);
+    tft.print(condition_temp);
+    tft.print(temp_unit);    
+  }
   
   tft.setCursor(centre_text(city, 80, 1), 30);
   tft.print(city);
@@ -226,7 +243,7 @@ static void update_display() {
   tft.setCursor(centre_text(condition_text, 80, 1), 90);
   tft.print(condition_text);
   
-  analogWrite(TFT_LED, 0);
+  analogWrite(TFT_LED, DIM);
 }
 
 static void read_str(const char *from, uint16_t fromlen, char *to, uint16_t tolen)
@@ -362,7 +379,7 @@ void setup () {
 
   xml.init(xmlbuf, sizeof(xmlbuf), xml_callback);
   
-  tft.initR(INITR_BLACKTAB);
+  tft.initR(INITR_REDTAB);
   tft.setRotation(1);
   analogWrite(TFT_LED, 0);
 }
@@ -379,24 +396,35 @@ static void net_callback(byte status, word off, word len) {
   }
 }
 
+#define CITY  "560743"
 #define ONE_MINUTE 1000 * 60L
 #define TWENTY_MINUTES 20 * ONE_MINUTE
+byte fade;
 
 void loop() {
   ether.packetLoop(ether.packetReceive());
 
   uint32_t now = millis();
   if (now > next_fetch) {
-    last_fetch = now;
     next_fetch = now + TWENTY_MINUTES;
     ether.persistTcpConnection(true);
-    ether.browseUrl(PSTR("/forecastrss"), "?w=560743&u=c", website, PSTR("Accept: text/xml\r\n"), net_callback);
+    ether.browseUrl(PSTR("/forecastrss"), "?w="CITY"&u=c", website, PSTR("Accept: text/xml\r\n"), net_callback);
   }
-  if (now > last_fetch + ONE_MINUTE)
-    analogWrite(TFT_LED, 250);
 
   if (status & DISPLAY_UPDATE) {
     update_display();
     set_status(DISPLAY_UPDATE, false);
+    fade = 0;
+  }
+
+  if (analogRead(A5) == 1023) {
+    bright_on = now;
+    fade = BRIGHT;
+    analogWrite(TFT_LED, BRIGHT);
+  }
+  if (now > bright_on + ONE_MINUTE && fade++ < DIM) {
+    analogWrite(TFT_LED, fade);
+    delay(25);
   }
 }
+
