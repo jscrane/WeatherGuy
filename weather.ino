@@ -22,7 +22,7 @@ static uint32_t next_fetch, bright_on;
 
 char website[] PROGMEM = "weather.yahooapis.com";
 
-byte xmlbuf[80];
+byte xmlbuf[90];
 TinyXML xml;
 
 #define DIM 230
@@ -44,8 +44,6 @@ byte condition_temp;
 short wind_direction;
 short atmos_pressure;
 
-#define BUFFPIXEL 20
-
 static int centre_text(const char *s, int x, int size)
 {
   return x - (strlen(s)*size*6) / 2;
@@ -64,13 +62,12 @@ static int val_len(int b)
   return 1;
 }
 
-void bmp_draw(char *filename, uint8_t x, uint8_t y) {
+void bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
   int      bmpWidth, bmpHeight;   // W+H in pixels
   uint8_t  bmpDepth;              // Bit depth (currently must be 24)
   uint32_t bmpImageoffset;        // Start of image data in file
   uint32_t rowSize;               // Not always = bmpWidth; may have padding
-  uint8_t  sdbuffer[3*BUFFPIXEL]; // pixel buffer (R+G+B per pixel)
-  uint8_t  buffidx = sizeof(sdbuffer); // Current position in sdbuffer
+  uint8_t  buffidx = bufsiz;      // Current position in buffer
   boolean  flip    = true;        // BMP is stored bottom-to-top
   int      w, h, row, col;
   uint8_t  r, g, b;
@@ -162,22 +159,22 @@ void bmp_draw(char *filename, uint8_t x, uint8_t y) {
     if (currPos != pos) { // Need seek?
       PFFS.lseek_file(pos);
       currPos = pos;
-      buffidx = sizeof(sdbuffer); // Force buffer reload
+      buffidx = bufsiz; // Force buffer reload
     }
   
     for (col=0; col<w; col++) { // For each pixel...
       // Time to read more pixel data?
-      if (buffidx >= sizeof(sdbuffer)) { // Indeed
+      if (buffidx >= bufsiz) { // Indeed
         int nread;
-        PFFS.read_file((char *)sdbuffer, sizeof(sdbuffer), &nread);
+        PFFS.read_file((char *)buf, bufsiz, &nread);
         currPos += nread;
         buffidx = 0; // Set index to beginning
       }
   
       // Convert pixel from BMP to TFT format, push to display
-      b = sdbuffer[buffidx++];
-      g = sdbuffer[buffidx++];
-      r = sdbuffer[buffidx++];
+      b = buf[buffidx++];
+      g = buf[buffidx++];
+      r = buf[buffidx++];
       tft.pushColor(tft.Color565(r,g,b));
     } // end pixel
   }
@@ -223,12 +220,19 @@ static void update_display() {
   tft.setCursor(0, tft.height()-16);
   tft.print(atmos_humidity);
   tft.println(F("%"));
-  
+
+  if (atmos_rising == 1) {
+    tft.setCursor(right(6, tft.width(), 1), tft.height()-24);
+    tft.print(F("rising"));
+  } else if (atmos_rising == -1) {
+    tft.setCursor(right(7, tft.width(), 1), tft.height()-24);
+    tft.print(F("falling"));
+  }
   tft.setCursor(right(val_len(atmos_pressure)+strlen(pres_unit), tft.width(), 2), tft.height()-16);
   tft.print(atmos_pressure);
   tft.println(pres_unit);
 
-  bmp_draw(condition_code, 54, 38);  
+  bmp_draw(xmlbuf, sizeof(xmlbuf), condition_code, 54, 38);  
   tft.setTextSize(1);
 
   if (condition_temp != wind_chill) {
@@ -254,11 +258,6 @@ static void read_str(const char *from, uint16_t fromlen, char *to, uint16_t tole
   memcpy(buf, from, fromlen);
   buf[fromlen] = 0;
   strncpy(to, buf, tolen); 
-}
-
-static int read_int(const char *from, uint16_t fromlen)
-{
-  return atoi(from);
 }
 
 static boolean strequals(const char *first, PGM_P second)
@@ -303,25 +302,25 @@ void xml_callback(uint8_t statusflags, char *tagName, uint16_t tagNameLen, char 
         read_str(data, dlen, speed_unit, sizeof(speed_unit));
     } else if (status & IN_WIND) {
       if (strequals(tagName, PSTR("chill")))
-        wind_chill = read_int(data, dlen);
+        wind_chill = atoi(data);
       else if (strequals(tagName, PSTR("direction")))
-        wind_direction = read_int(data, dlen);
+        wind_direction = atoi(data);
       else if (strequals(tagName, PSTR("speed")))
-        wind_speed = read_int(data, dlen);
+        wind_speed = atoi(data);
     } else if (status & IN_ATMOS) {
       if (strequals(tagName, PSTR("humidity")))
-        atmos_humidity = read_int(data, dlen);
+        atmos_humidity = atoi(data);
       else if (strequals(tagName, PSTR("pressure")))
-        atmos_pressure = read_int(data, dlen);
+        atmos_pressure = atoi(data);
       else if (strequals(tagName, PSTR("rising")))
-        atmos_rising = read_int(data, dlen);
+        atmos_rising = atoi(data);
     } else if (status & IN_CONDITION) {
       if (strequals(tagName, PSTR("code")))
         read_str(data, dlen, condition_code, sizeof(condition_code));
       if (strequals(tagName, PSTR("text")))
         read_str(data, dlen, condition_text, sizeof(condition_text));
       else if (strequals(tagName, PSTR("temp")))
-        condition_temp = read_int(data, dlen);
+        condition_temp = atoi(data);
     }
   } else if (statusflags & STATUS_ERROR) {
     Serial.print(F("\nTAG:"));
