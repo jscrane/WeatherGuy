@@ -3,6 +3,8 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
+
+#define _USE_DIR 0
 #include <petit_fatfs.h>
 #include <MemoryFree.h>
 
@@ -25,8 +27,6 @@ char website[] PROGMEM = "weather.yahooapis.com";
 byte xmlbuf[90];
 TinyXML xml;
 
-#define DIM 230
-#define BRIGHT 0
 Adafruit_ST7735 tft(TFT_CS, TFT_RS, TFT_RST);
 
 #define IN_LOCATION 1
@@ -38,11 +38,9 @@ Adafruit_ST7735 tft(TFT_CS, TFT_RS, TFT_RST);
 byte status;
 
 char temp_unit, pres_unit[3], speed_unit[5], condition_code[3], condition_text[32], city[16];
-byte wind_chill, wind_speed;
-byte atmos_humidity, atmos_rising;
-byte condition_temp;
-short wind_direction;
-short atmos_pressure;
+byte wind_speed, atmos_humidity;
+int8_t atmos_rising, condition_temp, wind_chill;
+short wind_direction, atmos_pressure;
 
 static int centre_text(const char *s, int x, int size)
 {
@@ -71,9 +69,13 @@ void bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
   boolean  flip    = true;        // BMP is stored bottom-to-top
   int      w, h, row, col;
   uint8_t  r, g, b;
-  uint32_t pos = 0, startTime = millis();
+  uint32_t pos = 0;
 
   if((x >= tft.width()) || (y >= tft.height())) return;
+
+#ifdef DEBUG
+  uint32_t startTime = millis();
+#endif
 
   int res = PFFS.open_file(filename);
   if (res != FR_OK) {
@@ -204,22 +206,77 @@ static uint32_t read32(uint32_t &p) {
   return result;
 }
 
+static const __FlashStringHelper *wind_dir(short deg)
+{
+  if (deg < 12 || deg >= 349)
+    return F("N");
+  if (deg >= 12 && deg < 34)
+    return F("NNE");
+  if (deg >= 34 && deg < 57)
+    return F("NE");
+  if (deg >= 57 && deg < 79)
+    return F("ENE");
+  if (deg >= 79 && deg < 102)
+    return F("E");
+  if (deg >= 102 && deg < 124)
+    return F("ESE");
+  if (deg >= 124 && deg < 147)
+    return F("SE");
+  if (deg >= 147 && deg < 169)
+    return F("SSE");
+  if (deg >= 169 && deg < 192)
+    return F("S");
+  if (deg >= 192 && deg < 214)
+    return F("SSW");
+  if (deg >= 214 && deg < 237)
+    return F("SW");
+  if (deg >= 237 && deg < 259)
+    return F("WSW");
+  if (deg >= 259 && deg < 282)
+    return F("W");
+  if (deg >= 282 && deg < 304)
+    return F("WNW");
+  if (deg >= 304 && deg < 327)
+    return F("NW");
+//  if (deg >= 327 && deg < 349)
+  return F("NNW");
+}
+
 static void update_display() {
   tft.fillScreen(ST7735_WHITE);
   tft.setTextSize(2);
   tft.setTextColor(ST7735_BLACK);
 
   tft.setCursor(0, 0);
-  tft.print(condition_temp);
-  tft.println(temp_unit);
-  
-  tft.setCursor(right(val_len(wind_speed)+strlen(speed_unit), tft.width(), 2), 0);
   tft.print(wind_speed);
   tft.println(speed_unit);
   
-  tft.setCursor(0, tft.height()-16);
+  tft.setCursor(right(val_len(atmos_humidity)+1, tft.width(), 2), 0);
   tft.print(atmos_humidity);
   tft.println(F("%"));
+  
+  tft.setCursor(0, tft.height()-16);
+  tft.print(condition_temp);
+  tft.println(temp_unit);
+
+  tft.setCursor(right(val_len(atmos_pressure)+strlen(pres_unit), tft.width(), 2), tft.height()-16);
+  tft.print(atmos_pressure);
+  tft.println(pres_unit);
+
+  bmp_draw(xmlbuf, sizeof(xmlbuf), condition_code, 54, 38);  
+  tft.setTextSize(1);
+  
+  tft.setCursor(centre_text(city, 80, 1), 30);
+  tft.print(city);
+
+  tft.setCursor(centre_text(condition_text, 80, 1), 90);
+  tft.print(condition_text);
+
+  if (condition_temp != wind_chill) {
+    tft.setCursor(0, tft.height()-24);
+    tft.print(wind_chill);
+    tft.print(temp_unit);    
+  }
 
   if (atmos_rising == 1) {
     tft.setCursor(right(6, tft.width(), 1), tft.height()-24);
@@ -228,26 +285,10 @@ static void update_display() {
     tft.setCursor(right(7, tft.width(), 1), tft.height()-24);
     tft.print(F("falling"));
   }
-  tft.setCursor(right(val_len(atmos_pressure)+strlen(pres_unit), tft.width(), 2), tft.height()-16);
-  tft.print(atmos_pressure);
-  tft.println(pres_unit);
-
-  bmp_draw(xmlbuf, sizeof(xmlbuf), condition_code, 54, 38);  
-  tft.setTextSize(1);
-
-  if (condition_temp != wind_chill) {
-    tft.setCursor(0, 16);
-    tft.print(condition_temp);
-    tft.print(temp_unit);    
-  }
   
-  tft.setCursor(centre_text(city, 80, 1), 30);
-  tft.print(city);
-
-  tft.setCursor(centre_text(condition_text, 80, 1), 90);
-  tft.print(condition_text);
-  
-  analogWrite(TFT_LED, DIM);
+  // bleah
+  tft.setCursor(0, 16);
+  tft.print(wind_dir(wind_direction));
 }
 
 static void read_str(const char *from, uint16_t fromlen, char *to, uint16_t tolen)
@@ -345,6 +386,11 @@ static void tx(byte d)
   loop_until_bit_is_set(SPSR, SPIF);
 }
 
+uint16_t update_interval = 20*60;
+char city_code[7];
+char units[2];
+byte bright, dim, fade;
+
 void setup () {
   Serial.begin(57600);
   Serial.println(freeMemory());
@@ -375,12 +421,38 @@ void setup () {
     Serial.println(res);
     return;
   }
+  strcpy_P((char *)xmlbuf, PSTR("config"));
+  res = PFFS.open_file((char *)xmlbuf);
+  if (res != FR_OK) {
+    Serial.print(F("config!"));
+    Serial.println(res);
+    return;
+  }
+  int nread;
+  res = PFFS.read_file((char *)xmlbuf, sizeof(xmlbuf), &nread);
+  if (res != FR_OK) {
+    Serial.print(F("read!"));
+    Serial.println(res);
+    return;
+  }
+  const char *delim = " \n";
+  char *p = strtok((char *)xmlbuf, delim);
+  update_interval = atoi(p);
+  p = strtok(0, delim);
+  bright = atoi(p);
+  p = strtok(0, delim);
+  dim = atoi(p);  
+  p = strtok(0, delim);
+  strcpy(city_code, p);
+  p = strtok(0, delim);
+  strcpy(units, p);
 
   xml.init(xmlbuf, sizeof(xmlbuf), xml_callback);
   
   tft.initR(INITR_REDTAB);
   tft.setRotation(1);
-  analogWrite(TFT_LED, 0);
+  analogWrite(TFT_LED, dim);
+  fade = dim;
 }
 
 static void net_callback(byte status, word off, word len) {
@@ -395,34 +467,34 @@ static void net_callback(byte status, word off, word len) {
   }
 }
 
-#define CITY  "560743"
 #define ONE_MINUTE 1000 * 60L
-#define TWENTY_MINUTES 20 * ONE_MINUTE
-byte fade;
 
 void loop() {
   ether.packetLoop(ether.packetReceive());
 
   uint32_t now = millis();
   if (now > next_fetch) {
-    next_fetch = now + TWENTY_MINUTES;
+    next_fetch = now + update_interval * 1000L;
     ether.persistTcpConnection(true);
-    ether.browseUrl(PSTR("/forecastrss"), "?w="CITY"&u=c", website, PSTR("Accept: text/xml\r\n"), net_callback);
+    strcpy_P((char *)xmlbuf, PSTR("?w="));
+    strcat((char *)xmlbuf, city_code);
+    strcat_P((char *)xmlbuf, PSTR("&u="));
+    strcat((char *)xmlbuf, units);
+    ether.browseUrl(PSTR("/forecastrss"), (char *)xmlbuf, website, PSTR("Accept: text/xml\r\n"), net_callback);
   }
 
   if (status & DISPLAY_UPDATE) {
     update_display();
     set_status(DISPLAY_UPDATE, false);
-    fade = 0;
   }
 
-  if (analogRead(A5) == 1023) {
+  if (fade == dim && analogRead(A5) == 1023) {
     bright_on = now;
-    fade = BRIGHT;
-    analogWrite(TFT_LED, BRIGHT);
-  }
-  if (now > bright_on + ONE_MINUTE && fade++ < DIM) {
+    fade = bright;
     analogWrite(TFT_LED, fade);
+  }
+  if (now > bright_on + ONE_MINUTE && fade < dim) {
+    analogWrite(TFT_LED, fade++);
     delay(25);
   }
 }
