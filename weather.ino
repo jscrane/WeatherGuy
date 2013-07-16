@@ -19,7 +19,7 @@
 #define TFT_RST  -1
 #define TFT_LED  6
 
-byte Ethernet::buffer[600];  // 567 is minimum buffer size to avoid losing data
+byte Ethernet::buffer[567];  // 567 is minimum buffer size to avoid losing data
 static uint32_t next_fetch, bright_on;
 
 char website[] PROGMEM = "weather.yahooapis.com";
@@ -35,6 +35,7 @@ Adafruit_ST7735 tft(TFT_CS, TFT_RS, TFT_RST);
 #define IN_WIND 16
 #define IN_CONDITION 32
 #define DISPLAY_UPDATE 64
+#define READING_RESPONSE 128
 byte status;
 
 char temp_unit, pres_unit[3], speed_unit[5], condition_code[3], condition_text[32], city[16];
@@ -251,7 +252,7 @@ static void update_display() {
   tft.print(wind_speed);
   tft.println(speed_unit);
   
-  tft.setCursor(right(val_len(atmos_humidity)+1, tft.width(), 2), 0);
+  tft.setCursor(right(val_len(atmos_humidity)+1, tft.width(), 2), tft.height()-16);
   tft.print(atmos_humidity);
   tft.println(F("%"));
   
@@ -259,7 +260,7 @@ static void update_display() {
   tft.print(condition_temp);
   tft.println(temp_unit);
 
-  tft.setCursor(right(val_len(atmos_pressure)+strlen(pres_unit), tft.width(), 2), tft.height()-16);
+  tft.setCursor(right(val_len(atmos_pressure)+strlen(pres_unit), tft.width(), 2), 0);
   tft.print(atmos_pressure);
   tft.println(pres_unit);
 
@@ -279,16 +280,23 @@ static void update_display() {
   }
 
   if (atmos_rising == 1) {
-    tft.setCursor(right(6, tft.width(), 1), tft.height()-24);
+    tft.setCursor(right(6, tft.width(), 1), 16);
     tft.print(F("rising"));
   } else if (atmos_rising == -1) {
-    tft.setCursor(right(7, tft.width(), 1), tft.height()-24);
+    tft.setCursor(right(7, tft.width(), 1), 16);
     tft.print(F("falling"));
   }
   
-  // bleah
   tft.setCursor(0, 16);
   tft.print(wind_dir(wind_direction));
+}
+
+static void set_status(int bit, boolean cond)
+{
+  if (cond)
+    status |= bit;
+  else
+    status &= ~bit;
 }
 
 static void read_str(const char *from, uint16_t fromlen, char *to, uint16_t tolen)
@@ -298,7 +306,18 @@ static void read_str(const char *from, uint16_t fromlen, char *to, uint16_t tole
     fromlen = sizeof(buf) - 1;
   memcpy(buf, from, fromlen);
   buf[fromlen] = 0;
-  strncpy(to, buf, tolen); 
+  if (strcmp(to, buf) != 0) {
+    strncpy(to, buf, tolen); 
+    set_status(DISPLAY_UPDATE, true);
+  }
+}
+
+static int read_int(const char *from, int curr)
+{
+  int val = atoi(from);
+  if (val != curr)
+    set_status(DISPLAY_UPDATE, true);
+  return val;
 }
 
 static boolean strequals(const char *first, PGM_P second)
@@ -309,14 +328,6 @@ static boolean strequals(const char *first, PGM_P second)
 static boolean strcontains(const char *first, PGM_P second)
 {
     return strstr_P(first, second) != 0;
-}
-
-static void set_status(int bit, boolean cond)
-{
-  if (cond)
-    status |= bit;
-  else
-    status &= ~bit;
 }
 
 void xml_callback(uint8_t statusflags, char *tagName, uint16_t tagNameLen, char *data, uint16_t dlen) {
@@ -343,33 +354,35 @@ void xml_callback(uint8_t statusflags, char *tagName, uint16_t tagNameLen, char 
         read_str(data, dlen, speed_unit, sizeof(speed_unit));
     } else if (status & IN_WIND) {
       if (strequals(tagName, PSTR("chill")))
-        wind_chill = atoi(data);
+        wind_chill = read_int(data, wind_chill);
       else if (strequals(tagName, PSTR("direction")))
-        wind_direction = atoi(data);
+        wind_direction = read_int(data, wind_direction);
       else if (strequals(tagName, PSTR("speed")))
-        wind_speed = atoi(data);
+        wind_speed = read_int(data, wind_speed);
     } else if (status & IN_ATMOS) {
       if (strequals(tagName, PSTR("humidity")))
-        atmos_humidity = atoi(data);
+        atmos_humidity = read_int(data, atmos_humidity);
       else if (strequals(tagName, PSTR("pressure")))
-        atmos_pressure = atoi(data);
+        atmos_pressure = read_int(data, atmos_pressure);
       else if (strequals(tagName, PSTR("rising")))
-        atmos_rising = atoi(data);
+        atmos_rising = read_int(data, atmos_rising);
     } else if (status & IN_CONDITION) {
       if (strequals(tagName, PSTR("code")))
         read_str(data, dlen, condition_code, sizeof(condition_code));
       if (strequals(tagName, PSTR("text")))
         read_str(data, dlen, condition_text, sizeof(condition_text));
       else if (strequals(tagName, PSTR("temp")))
-        condition_temp = atoi(data);
+        condition_temp = read_int(data, condition_temp);
     }
   } else if (statusflags & STATUS_ERROR) {
     Serial.print(F("\nTAG:"));
     Serial.print(tagName);
     Serial.print(F(" :"));
     Serial.println(data);
+    bool rsp = (status & READING_RESPONSE);
     status = 0;
     set_status(DISPLAY_UPDATE, true);
+    set_status(READING_RESPONSE, rsp);
   }
 }
 
@@ -403,6 +416,7 @@ void setup () {
   if (!ether.dhcpSetup())
     Serial.println(F("DHCP!"));
 
+  // FIXME
   ether.hisip[0] = 188;
   ether.hisip[1] = 125;
   ether.hisip[2] = 73;
@@ -459,8 +473,9 @@ static void net_callback(byte status, word off, word len) {
   Serial.println(off);
   Serial.println(len);
   if (status == 1) {
-    char *rs = (char *)Ethernet::buffer+off, *re = rs + len +1;  
-    while (rs != re) {
+    set_status(READING_RESPONSE, len == 512);
+    char *rs = (char *)Ethernet::buffer+off;  
+    while (len-- > 0) {
       Serial.print(*rs);
       xml.processChar(*rs++);
     }
@@ -481,9 +496,9 @@ void loop() {
     strcat_P((char *)xmlbuf, PSTR("&u="));
     strcat((char *)xmlbuf, units);
     ether.browseUrl(PSTR("/forecastrss"), (char *)xmlbuf, website, PSTR("Accept: text/xml\r\n"), net_callback);
-  }
-
-  if (status & DISPLAY_UPDATE) {
+    set_status(READING_RESPONSE, true);
+  } 
+  if (!(status & READING_RESPONSE) && (status & DISPLAY_UPDATE)) {  
     update_display();
     set_status(DISPLAY_UPDATE, false);
   }
@@ -492,8 +507,7 @@ void loop() {
     bright_on = now;
     fade = bright;
     analogWrite(TFT_LED, fade);
-  }
-  if (now > bright_on + ONE_MINUTE && fade < dim) {
+  } else if (now > bright_on + ONE_MINUTE && fade < dim) {
     analogWrite(TFT_LED, fade++);
     delay(25);
   }
