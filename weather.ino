@@ -295,16 +295,16 @@ static void update_display() {
   const float a = 0.999847695, b = 0.017452406;
   // wind dir is azimuthal angle with N at 0
   // also rotates clockwise so compensate
-  float s = 0.0, c = 1.0;
+  float s = 1.0, c = 0.0;
   Serial.print(F("wind-dir="));
   Serial.println(wind_direction);
-  for (uint16_t i = 0; i < 90; i++) {
+  for (uint16_t i = 0; i < wind_direction; i++) {
     const float ns = a*s + b*c;
     const float nc = a*c - b*s;
     c = nc;
     s = ns;
   }
-  float ex = cx+rad*c, ey = cy-rad*s;
+  float ex = cx-rad*c, ey = cy-rad*s;
   tft.fillCircle(ex, ey, 3, ST7735_BLACK);
   tft.drawLine(ex, ey, (3*ex + cx)/4, (3*ey + cy)/4, ST7735_BLACK);
 }
