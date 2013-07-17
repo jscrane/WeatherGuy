@@ -41,7 +41,7 @@ byte status;
 char temp_unit, pres_unit[3], speed_unit[5], condition_code[3], condition_text[32], city[16];
 byte wind_speed, atmos_humidity;
 int8_t atmos_rising, condition_temp, wind_chill;
-short wind_direction, atmos_pressure;
+uint16_t wind_direction, atmos_pressure;
 
 static int centre_text(const char *s, int x, int size)
 {
@@ -289,6 +289,24 @@ static void update_display() {
   
   tft.setCursor(0, 16);
   tft.print(wind_dir(wind_direction));
+
+  // http://www.iquilezles.org/www/articles/sincos/sincos.htm
+  int rad = 50, cx = 80, cy = 64;
+  const float a = 0.999847695, b = 0.017452406;
+  // wind dir is azimuthal angle with N at 0
+  // also rotates clockwise so compensate
+  float s = 0.0, c = 1.0;
+  Serial.print(F("wind-dir="));
+  Serial.println(wind_direction);
+  for (uint16_t i = 0; i < 90; i++) {
+    const float ns = a*s + b*c;
+    const float nc = a*c - b*s;
+    c = nc;
+    s = ns;
+  }
+  float ex = cx+rad*c, ey = cy-rad*s;
+  tft.fillCircle(ex, ey, 3, ST7735_BLACK);
+  tft.drawLine(ex, ey, (3*ex + cx)/4, (3*ey + cy)/4, ST7735_BLACK);
 }
 
 static void set_status(int bit, boolean cond)
@@ -502,6 +520,7 @@ void loop() {
     update_display();
     set_status(DISPLAY_UPDATE, false);
   }
+  tft.fillRect(tft.width()/2-2, 0, 4, 4, (status & READING_RESPONSE)? ST7735_RED: ST7735_GREEN);
 
   if (fade == dim && analogRead(A5) == 1023) {
     bright_on = now;
