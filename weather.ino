@@ -248,11 +248,23 @@ static void update_display() {
   tft.fillScreen(ST7735_WHITE);
   tft.setTextColor(ST7735_BLACK);
 
-  tft.setCursor(1, 1);
   tft.setTextSize(2);
+  tft.setCursor(1, 1);
   tft.print(wind_speed);
   tft.setTextSize(1);
-  tft.println(speed_unit);
+  tft.print(speed_unit);  
+  tft.setCursor(1, 17);
+  tft.print(cardinal_direction(wind_direction));
+  
+  tft.setTextSize(2);
+  tft.setCursor(1, tft.height()-16);
+  tft.print(condition_temp);
+  tft.setTextSize(1);
+  tft.print(temp_unit);
+  if (condition_temp != wind_chill) {
+    tft.setCursor(1, tft.height()-24);
+    tft.print(wind_chill);
+  }
 
   tft.setTextSize(2);
   tft.setCursor(right(val_len(atmos_humidity), tft.width(), 2)-6, tft.height()-16);
@@ -260,32 +272,12 @@ static void update_display() {
   tft.setTextSize(1);
   tft.setCursor(tft.width()-6, tft.height()-16);  // ???
   tft.print('%');
-  
-  tft.setTextSize(2);
-  tft.setCursor(1, tft.height()-16);
-  tft.print(condition_temp);
-  tft.setTextSize(1);
-  tft.println(temp_unit);
 
   tft.setTextSize(2);
   tft.setCursor(right(val_len(atmos_pressure), tft.width(), 2)-6*strlen(pres_unit), 1);
   tft.print(atmos_pressure);
   tft.setTextSize(1);
-  tft.println(pres_unit);
-
-  bmp_draw(xmlbuf, sizeof(xmlbuf), condition_code, 54, 38);  
-  
-  tft.setCursor(centre_text(city, 80, 1), 30);
-  tft.print(city);
-
-  tft.setCursor(centre_text(condition_text, 80, 1), 90);
-  tft.print(condition_text);
-
-  if (condition_temp != wind_chill) {
-    tft.setCursor(1, tft.height()-24);
-    tft.print(wind_chill);
-  }
-
+  tft.print(pres_unit);
   if (atmos_rising == 1) {
     tft.setCursor(right(6, tft.width(), 1), 17);
     tft.print(F("rising"));
@@ -293,9 +285,12 @@ static void update_display() {
     tft.setCursor(right(7, tft.width(), 1), 17);
     tft.print(F("falling"));
   }
-  
-  tft.setCursor(1, 17);
-  tft.print(cardinal_direction(wind_direction));
+
+  tft.setCursor(centre_text(city, 80, 1), 30);
+  tft.print(city);
+  bmp_draw(xmlbuf, sizeof(xmlbuf), condition_code, 54, 38);  
+  tft.setCursor(centre_text(condition_text, 80, 1), 90);
+  tft.print(condition_text);
 
   // http://www.iquilezles.org/www/articles/sincos/sincos.htm
   int rad = 50, cx = 80, cy = 64;
