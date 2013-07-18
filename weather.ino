@@ -61,6 +61,7 @@ static int val_len(int b)
   return 1;
 }
 
+// from Adafruit's spitftbitmap ST7735 example
 void bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
   int      bmpWidth, bmpHeight;   // W+H in pixels
   uint8_t  bmpDepth;              // Bit depth (currently must be 24)
@@ -207,7 +208,7 @@ static uint32_t read32(uint32_t &p) {
   return result;
 }
 
-static const __FlashStringHelper *wind_dir(short deg)
+static const __FlashStringHelper *cardinal_direction(short deg)
 {
   if (deg < 12 || deg >= 349)
     return F("N");
@@ -245,27 +246,34 @@ static const __FlashStringHelper *wind_dir(short deg)
 
 static void update_display() {
   tft.fillScreen(ST7735_WHITE);
-  tft.setTextSize(2);
   tft.setTextColor(ST7735_BLACK);
 
-  tft.setCursor(0, 0);
+  tft.setCursor(1, 1);
+  tft.setTextSize(2);
   tft.print(wind_speed);
+  tft.setTextSize(1);
   tft.println(speed_unit);
-  
-  tft.setCursor(right(val_len(atmos_humidity)+1, tft.width(), 2), tft.height()-16);
+
+  tft.setTextSize(2);
+  tft.setCursor(right(val_len(atmos_humidity), tft.width(), 2)-6, tft.height()-16);
   tft.print(atmos_humidity);
-  tft.println(F("%"));
+  tft.setTextSize(1);
+  tft.setCursor(tft.width()-6, tft.height()-16);  // ???
+  tft.print('%');
   
-  tft.setCursor(0, tft.height()-16);
+  tft.setTextSize(2);
+  tft.setCursor(1, tft.height()-16);
   tft.print(condition_temp);
+  tft.setTextSize(1);
   tft.println(temp_unit);
 
-  tft.setCursor(right(val_len(atmos_pressure)+strlen(pres_unit), tft.width(), 2), 0);
+  tft.setTextSize(2);
+  tft.setCursor(right(val_len(atmos_pressure), tft.width(), 2)-6*strlen(pres_unit), 1);
   tft.print(atmos_pressure);
+  tft.setTextSize(1);
   tft.println(pres_unit);
 
   bmp_draw(xmlbuf, sizeof(xmlbuf), condition_code, 54, 38);  
-  tft.setTextSize(1);
   
   tft.setCursor(centre_text(city, 80, 1), 30);
   tft.print(city);
@@ -274,36 +282,33 @@ static void update_display() {
   tft.print(condition_text);
 
   if (condition_temp != wind_chill) {
-    tft.setCursor(0, tft.height()-24);
+    tft.setCursor(1, tft.height()-24);
     tft.print(wind_chill);
-    tft.print(temp_unit);    
   }
 
   if (atmos_rising == 1) {
-    tft.setCursor(right(6, tft.width(), 1), 16);
+    tft.setCursor(right(6, tft.width(), 1), 17);
     tft.print(F("rising"));
   } else if (atmos_rising == -1) {
-    tft.setCursor(right(7, tft.width(), 1), 16);
+    tft.setCursor(right(7, tft.width(), 1), 17);
     tft.print(F("falling"));
   }
   
-  tft.setCursor(0, 16);
-  tft.print(wind_dir(wind_direction));
+  tft.setCursor(1, 17);
+  tft.print(cardinal_direction(wind_direction));
 
   // http://www.iquilezles.org/www/articles/sincos/sincos.htm
   int rad = 50, cx = 80, cy = 64;
   const float a = 0.999847695, b = 0.017452406;
   // wind dir is azimuthal angle with N at 0
-  // also rotates clockwise so compensate
   float s = 1.0, c = 0.0;
-  Serial.print(F("wind-dir="));
-  Serial.println(wind_direction);
   for (uint16_t i = 0; i < wind_direction; i++) {
     const float ns = a*s + b*c;
     const float nc = a*c - b*s;
     c = nc;
     s = ns;
   }
+  // wind dir rotates clockwise so compensate
   float ex = cx-rad*c, ey = cy-rad*s;
   tft.fillCircle(ex, ey, 3, ST7735_BLACK);
   tft.drawLine(ex, ey, (3*ex + cx)/4, (3*ey + cy)/4, ST7735_BLACK);
