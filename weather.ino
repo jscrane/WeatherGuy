@@ -4,7 +4,6 @@
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
 
-#define _USE_DIR 0
 #include <petit_fatfs.h>
 #include <MemoryFree.h>
 
@@ -12,12 +11,12 @@
 #include <string.h>
 #include <avr/pgmspace.h>
 
-#define SD_CS  4
-#define ETHER_CS 10
-#define TFT_CS  9
-#define TFT_RS  5
 #define TFT_RST  -1
+#define TFT_RS   5
 #define TFT_LED  6
+#define TFT_CS   7
+#define SD_CS    8
+#define ETHER_CS 10
 
 byte Ethernet::buffer[567];  // 567 is minimum buffer size to avoid losing data
 static uint32_t next_fetch, bright_on;
