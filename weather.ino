@@ -42,6 +42,7 @@ byte wind_speed, atmos_humidity;
 int8_t atmos_rising, condition_temp, wind_chill;
 uint16_t wind_direction, atmos_pressure;
 
+//#define DEBUG
 #ifdef DEBUG
 Print &out = Serial;
 #else
@@ -436,6 +437,11 @@ char city_code[7];
 char units[2];
 byte bright, dim, fade;
 
+static void halt() {
+  out.println(F("halt"));
+  for (;;);
+}
+
 void setup () {
 #ifdef DEBUG
   Serial.begin(57600);
@@ -446,47 +452,30 @@ void setup () {
   tft.fillScreen(ST7735_BLACK);
   tft.setTextColor(ST7735_WHITE);
   tft.setCursor(0,0);
+  analogWrite(TFT_LED, 0);
   
   out.println(freeMemory());
-  
-  // ethernet interface mac address, must be unique on the LAN
-  byte mac[] = { 0x74, 0x69, 0x69, 0x2d, 0x30, 0x31 };
-  if (ether.begin(sizeof Ethernet::buffer, mac, ETHER_CS) == 0) 
-    out.println(F("Ethernet!"));
 
-  if (!ether.dhcpSetup())
-    out.println(F("DHCP!"));
-
-  // FIXME
-  ether.hisip[0] = 188;
-  ether.hisip[1] = 125;
-  ether.hisip[2] = 73;
-  ether.hisip[3] = 190;
-  /*
-  if (!ether.dnsLookup(website))
-    out.println(F("DNS!"));
-  */
-
-  // ether has now initialised the SPI bus...
+  // initialise the SD card and read the config file
   int res = PFFS.begin(SD_CS, rx, tx);
   if (res != FR_OK) {
     out.print(F("PFFS!"));
     out.println(res);
-    return;
+    halt();
   }
   strcpy_P((char *)xmlbuf, PSTR("config"));
   res = PFFS.open_file((char *)xmlbuf);
   if (res != FR_OK) {
     out.print(F("config!"));
     out.println(res);
-    return;
+    halt();
   }
   int nread;
   res = PFFS.read_file((char *)xmlbuf, sizeof(xmlbuf), &nread);
   if (res != FR_OK) {
     out.print(F("read!"));
     out.println(res);
-    return;
+    halt();
   }
   const char *delim = " \n";
   char *p = strtok((char *)xmlbuf, delim);
@@ -499,6 +488,30 @@ void setup () {
   strcpy(city_code, p);
   p = strtok(0, delim);
   strcpy(units, p);
+  
+  // ethernet interface mac address, must be unique on the LAN
+  byte mac[] = { 0x74, 0x69, 0x69, 0x2d, 0x30, 0x31 };
+  if (ether.begin(sizeof Ethernet::buffer, mac, ETHER_CS) == 0) {
+    out.println(F("Ethernet!"));
+    halt();
+  }
+
+  if (!ether.dhcpSetup()) {
+    out.println(F("DHCP!"));
+    halt();
+  }
+
+  // FIXME
+  ether.hisip[0] = 188;
+  ether.hisip[1] = 125;
+  ether.hisip[2] = 73;
+  ether.hisip[3] = 190;
+  /*
+  if (!ether.dnsLookup(website)) {
+    out.println(F("DNS!"));
+    halt();
+  }
+  */
 
   xml.init(xmlbuf, sizeof(xmlbuf), xml_callback);
   
