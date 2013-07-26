@@ -42,6 +42,12 @@ byte wind_speed, atmos_humidity;
 int8_t atmos_rising, condition_temp, wind_chill;
 uint16_t wind_direction, atmos_pressure;
 
+#ifdef DEBUG
+Print &out = Serial;
+#else
+Print &out = tft;
+#endif
+
 static int centre_text(const char *s, int x, int size)
 {
   return x - (strlen(s)*size*6) / 2;
@@ -80,51 +86,57 @@ void bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
 
   int res = PFFS.open_file(filename);
   if (res != FR_OK) {
-    Serial.print(F("file.open!"));
-    Serial.println(res);
+    out.print(F("file.open!"));
+    out.println(res);
     return;
   }
 
   // Parse BMP header
   uint32_t currPos = 0;
   if (read16(currPos) != 0x4D42) {
-    Serial.println(F("Unknown BMP signature"));
+    out.println(F("Unknown BMP signature"));
     return;
   }
-  Serial.print(F("File size: "));
-  Serial.println(read32(currPos));
+#ifdef DEBUG  
+  out.print(F("File size: "));
+  out.println(read32(currPos));
+#else
+  (void)read32(currPos);
+#endif  
   (void)read32(currPos); // Read & ignore creator bytes
   bmpImageoffset = read32(currPos); // Start of image data
-  Serial.print(F("Image Offset: ")); 
-  Serial.println(bmpImageoffset, DEC);
+#ifdef DEBUG
+  out.print(F("Image Offset: ")); 
+  out.println(bmpImageoffset, DEC);
+#endif
   // Read DIB header
   uint32_t header_size = read32(currPos);
 #ifdef DEBUG
-  Serial.print(F("Header size: ")); 
-  Serial.println(header_size);
+  out.print(F("Header size: ")); 
+  out.println(header_size);
 #endif
   bmpWidth  = read32(currPos);
   bmpHeight = read32(currPos);
   if (read16(currPos) != 1) {
-    Serial.println(F("# planes -- must be '1'"));
+    out.println(F("# planes -- must be '1'"));
     return;
   }
   bmpDepth = read16(currPos); // bits per pixel
 #ifdef DEBUG
-  Serial.print(F("Bit Depth: ")); 
-  Serial.println(bmpDepth);
+  out.print(F("Bit Depth: ")); 
+  out.println(bmpDepth);
 #endif
   if((bmpDepth != 24) || (read32(currPos) != 0)) {
     // 0 = uncompressed
-    Serial.println(F("BMP format not recognized."));
+    out.println(F("BMP format not recognized."));
     return;
   }
   
 #ifdef DEBUG
-  Serial.print(F("Image size: "));
-  Serial.print(bmpWidth);
-  Serial.print('x');
-  Serial.println(bmpHeight);
+  out.print(F("Image size: "));
+  out.print(bmpWidth);
+  out.print('x');
+  out.println(bmpHeight);
 #endif
   
   // BMP rows are padded (if needed) to 4-byte boundary
@@ -182,9 +194,9 @@ void bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
     } // end pixel
   }
 #ifdef DEBUG
-  Serial.print(F("Loaded in "));
-  Serial.print(millis() - startTime);
-  Serial.println(F(" ms"));
+  out.print(F("Loaded in "));
+  out.print(millis() - startTime);
+  out.println(F(" ms"));
 #endif
 }
 
@@ -357,7 +369,8 @@ void xml_callback(uint8_t statusflags, char *tagName, uint16_t tagNameLen, char 
       set_status(IN_CONDITION, strcontains(tagName, PSTR(":condition")));
     }
   } else if (statusflags & STATUS_END_TAG) {
-    set_status(DISPLAY_UPDATE, strequals(tagName, PSTR("/rss")));
+    if (strequals(tagName, PSTR("/rss")))
+      set_status(DISPLAY_UPDATE, true);
   } else if (statusflags & STATUS_ATTR_TEXT) {
     if (status & IN_LOCATION) {
       if (strequals(tagName, PSTR("city")))
@@ -392,10 +405,12 @@ void xml_callback(uint8_t statusflags, char *tagName, uint16_t tagNameLen, char 
         condition_temp = read_int(data, condition_temp);
     }
   } else if (statusflags & STATUS_ERROR) {
-    Serial.print(F("\nTAG:"));
-    Serial.print(tagName);
-    Serial.print(F(" :"));
-    Serial.println(data);
+#ifdef DEBUG
+    out.print(F("\nTAG:"));
+    out.print(tagName);
+    out.print(F(" :"));
+    out.println(data);
+#endif
     bool rsp = (status & READING_RESPONSE);
     status = 0;
     set_status(DISPLAY_UPDATE, true);
@@ -422,16 +437,25 @@ char units[2];
 byte bright, dim, fade;
 
 void setup () {
+#ifdef DEBUG
   Serial.begin(57600);
-  Serial.println(freeMemory());
+#endif
+
+  tft.initR(INITR_REDTAB);
+  tft.setRotation(1);
+  tft.fillScreen(ST7735_BLACK);
+  tft.setTextColor(ST7735_WHITE);
+  tft.setCursor(0,0);
+  
+  out.println(freeMemory());
   
   // ethernet interface mac address, must be unique on the LAN
   byte mac[] = { 0x74, 0x69, 0x69, 0x2d, 0x30, 0x31 };
   if (ether.begin(sizeof Ethernet::buffer, mac, ETHER_CS) == 0) 
-    Serial.println(F("Ethernet!"));
+    out.println(F("Ethernet!"));
 
   if (!ether.dhcpSetup())
-    Serial.println(F("DHCP!"));
+    out.println(F("DHCP!"));
 
   // FIXME
   ether.hisip[0] = 188;
@@ -440,30 +464,28 @@ void setup () {
   ether.hisip[3] = 190;
   /*
   if (!ether.dnsLookup(website))
-    Serial.println(F("DNS!"));
-    
-  ether.printIp("SRV: ", ether.hisip);    
+    out.println(F("DNS!"));
   */
 
   // ether has now initialised the SPI bus...
   int res = PFFS.begin(SD_CS, rx, tx);
   if (res != FR_OK) {
-    Serial.print(F("PFFS!"));
-    Serial.println(res);
+    out.print(F("PFFS!"));
+    out.println(res);
     return;
   }
   strcpy_P((char *)xmlbuf, PSTR("config"));
   res = PFFS.open_file((char *)xmlbuf);
   if (res != FR_OK) {
-    Serial.print(F("config!"));
-    Serial.println(res);
+    out.print(F("config!"));
+    out.println(res);
     return;
   }
   int nread;
   res = PFFS.read_file((char *)xmlbuf, sizeof(xmlbuf), &nread);
   if (res != FR_OK) {
-    Serial.print(F("read!"));
-    Serial.println(res);
+    out.print(F("read!"));
+    out.println(res);
     return;
   }
   const char *delim = " \n";
@@ -480,20 +502,22 @@ void setup () {
 
   xml.init(xmlbuf, sizeof(xmlbuf), xml_callback);
   
-  tft.initR(INITR_REDTAB);
-  tft.setRotation(1);
   analogWrite(TFT_LED, dim);
   fade = dim;
 }
 
 static void net_callback(byte status, word off, word len) {
-  Serial.println(off);
-  Serial.println(len);
+#ifdef DEBUG
+  out.println(off);
+  out.println(len);
+#endif
   if (status == 1) {
     set_status(READING_RESPONSE, len == 512);
     char *rs = (char *)Ethernet::buffer+off;  
     while (len-- > 0) {
-      Serial.print(*rs);
+#ifdef DEBUG
+      out.print(*rs);
+#endif
       xml.processChar(*rs++);
     }
   }
