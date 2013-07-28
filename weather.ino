@@ -31,6 +31,7 @@ Adafruit_ST7735 tft(TFT_CS, TFT_RS, TFT_RST);
 #define IN_LOCATION 1
 #define IN_UNITS 2
 #define IN_ATMOS 4
+#define IN_FORECAST 8
 #define IN_WIND 16
 #define IN_CONDITION 32
 #define DISPLAY_UPDATE 64
@@ -42,6 +43,12 @@ byte wind_speed, atmos_humidity;
 int8_t atmos_rising, condition_temp, wind_chill;
 uint16_t wind_direction, atmos_pressure;
 
+struct forecast {
+  int8_t low, high;
+  char code[3], day[4], text[16], date[7];
+} forecasts[5];
+struct forecast *fcast = forecasts;
+  
 //#define DEBUG
 #ifdef DEBUG
 Print &out = Serial;
@@ -61,9 +68,9 @@ static int right(int n, int x, int size)
 
 static int val_len(int b)
 {
-  if (b > 1000) return 4;
-  if (b > 100) return 3;
-  if (b > 10) return 2;
+  if (b >= 1000) return 4;
+  if (b >= 100) return 3;
+  if (b >= 10) return 2;
   return 1;
 }
 
@@ -88,6 +95,9 @@ void bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
   int res = PFFS.open_file(filename);
   if (res != FR_OK) {
     out.print(F("file.open!"));
+    out.print(' ');
+    out.print(filename);
+    out.print(' ');
     out.println(res);
     return;
   }
@@ -256,7 +266,7 @@ static const __FlashStringHelper *cardinal_direction(short deg)
   return F("NNW");
 }
 
-static void update_display() {
+static void display_current() {
   tft.fillScreen(ST7735_WHITE);
   tft.setTextColor(ST7735_BLACK);
 
@@ -321,6 +331,38 @@ static void update_display() {
   tft.drawLine(ex, ey, (3*ex + cx)/4, (3*ey + cy)/4, ST7735_BLACK);
 }
 
+static void display_forecast(struct forecast *f)
+{
+  tft.fillScreen(ST7735_WHITE);
+  
+  tft.setTextSize(2);
+  tft.setCursor(1, tft.height()-16);
+  tft.print(f->low);
+  tft.setTextSize(1);
+  tft.print(temp_unit);
+  tft.setCursor(1, tft.height()-24);
+  tft.print(F("low"));
+
+  tft.setTextSize(2);
+  tft.setCursor(right(val_len(f->high), tft.width(), 2)-6, tft.height()-16);
+  tft.print(f->high);
+  tft.setTextSize(1);
+  tft.setCursor(tft.width()-6, tft.height()-16);  // ???
+  tft.print(temp_unit);
+  tft.setCursor(right(4, tft.width(), 1), tft.height()-24);
+  tft.print(F("high"));
+  
+  tft.setTextSize(2);
+  tft.setCursor(centre_text(f->day, 80, 2), 14);
+  tft.print(f->day);
+  tft.setTextSize(1);
+  tft.setCursor(centre_text(f->date, 80, 1), 30);
+  tft.println(f->date);
+  bmp_draw(xmlbuf, sizeof(xmlbuf), f->code, 54, 38);  
+  tft.setCursor(centre_text(f->text, 80, 1), 90);
+  tft.print(f->text);  
+}
+
 static void set_status(int bit, boolean cond)
 {
   if (cond)
@@ -334,6 +376,8 @@ static void read_str(const char *from, uint16_t fromlen, char *to, uint16_t tole
   char buf[20];
   if (fromlen >= sizeof(buf))
     fromlen = sizeof(buf) - 1;
+  if (fromlen > tolen)
+    fromlen = tolen - 1;
   memcpy(buf, from, fromlen);
   buf[fromlen] = 0;
   if (strcmp(to, buf) != 0) {
@@ -368,10 +412,14 @@ void xml_callback(uint8_t statusflags, char *tagName, uint16_t tagNameLen, char 
       set_status(IN_ATMOS, strcontains(tagName, PSTR(":atmos")));
       set_status(IN_WIND, strcontains(tagName, PSTR(":wind")));
       set_status(IN_CONDITION, strcontains(tagName, PSTR(":condition")));
+      set_status(IN_FORECAST, strcontains(tagName, PSTR(":forecast")));
     }
   } else if (statusflags & STATUS_END_TAG) {
-    if (strequals(tagName, PSTR("/rss")))
+    if (strequals(tagName, PSTR("/rss"))) {
       set_status(DISPLAY_UPDATE, true);
+      fcast = forecasts;
+    } else if (status & IN_FORECAST)
+      fcast++;
   } else if (statusflags & STATUS_ATTR_TEXT) {
     if (status & IN_LOCATION) {
       if (strequals(tagName, PSTR("city")))
@@ -404,6 +452,19 @@ void xml_callback(uint8_t statusflags, char *tagName, uint16_t tagNameLen, char 
         read_str(data, dlen, condition_text, sizeof(condition_text));
       else if (strequals(tagName, PSTR("temp")))
         condition_temp = read_int(data, condition_temp);
+    } else if (status & IN_FORECAST) {
+      if (strequals(tagName, PSTR("day")))
+        read_str(data, dlen, fcast->day, sizeof(fcast->day));
+      else if (strequals(tagName, PSTR("low")))
+        fcast->low = read_int(data, fcast->low);
+      else if (strequals(tagName, PSTR("high")))
+        fcast->high = read_int(data, fcast->high);
+      else if (strequals(tagName, PSTR("code")))
+        read_str(data, dlen, fcast->code, sizeof(fcast->code));
+      else if (strequals(tagName, PSTR("text")))
+        read_str(data, dlen, fcast->text, sizeof(fcast->text));
+      else if (strequals(tagName, PSTR("date")))
+        read_str(data, dlen, fcast->date, sizeof(fcast->date));
     }
   } else if (statusflags & STATUS_ERROR) {
 #ifdef DEBUG
@@ -536,7 +597,7 @@ static void net_callback(byte status, word off, word len) {
   }
 }
 
-#define ONE_MINUTE 1000 * 60L
+#define TWO_MINS 120000L
 
 void loop() {
   ether.packetLoop(ether.packetReceive());
@@ -551,10 +612,17 @@ void loop() {
     strcat((char *)xmlbuf, units);
     ether.browseUrl(PSTR("/forecastrss"), (char *)xmlbuf, website, PSTR("Accept: text/xml\r\n"), net_callback);
     set_status(READING_RESPONSE, true);
-  } 
-  if (!(status & READING_RESPONSE) && (status & DISPLAY_UPDATE)) {  
-    update_display();
-    set_status(DISPLAY_UPDATE, false);
+  }  else if (!(status & READING_RESPONSE)) {
+    if (status & DISPLAY_UPDATE) {  
+      display_current();
+      set_status(DISPLAY_UPDATE, false);
+    } else if ((now % 10000) == 0 && fade != dim) {
+      uint32_t t = (now / 10000) % 6;
+      if (t == 0)
+        display_current();
+      else
+        display_forecast(forecasts+t-1);
+    }
   }
   tft.fillRect(tft.width()/2-2, 0, 4, 4, (status & READING_RESPONSE)? ST7735_RED: ST7735_GREEN);
 
@@ -562,9 +630,12 @@ void loop() {
     bright_on = now;
     fade = bright;
     analogWrite(TFT_LED, fade);
-  } else if (now > bright_on + ONE_MINUTE && fade < dim) {
+  } else if (now > bright_on + TWO_MINS && fade < dim) {
     analogWrite(TFT_LED, fade++);
-    delay(25);
+    if (fade == dim)
+      set_status(DISPLAY_UPDATE, (now / 10000) % 6 != 0);
+    else
+      delay(25);
   }
 }
 
