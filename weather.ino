@@ -45,7 +45,7 @@ uint16_t wind_direction, atmos_pressure;
 
 struct forecast {
   int8_t low, high;
-  char code[3], day[4], text[16], date[7];
+  char code[3], day[4], text[20], date[7];
 } forecasts[5];
 struct forecast *fcast = forecasts;
   
@@ -562,17 +562,10 @@ void setup () {
     halt();
   }
 
-  // FIXME
-  ether.hisip[0] = 188;
-  ether.hisip[1] = 125;
-  ether.hisip[2] = 73;
-  ether.hisip[3] = 190;
-  /*
   if (!ether.dnsLookup(website)) {
     out.println(F("DNS!"));
     halt();
   }
-  */
 
   xml.init(xmlbuf, sizeof(xmlbuf), xml_callback);
   
@@ -612,7 +605,8 @@ void loop() {
     strcat((char *)xmlbuf, units);
     ether.browseUrl(PSTR("/forecastrss"), (char *)xmlbuf, website, PSTR("Accept: text/xml\r\n"), net_callback);
     set_status(READING_RESPONSE, true);
-  }  else if (!(status & READING_RESPONSE)) {
+    tft.fillRect(tft.width()/2-2, 0, 4, 4, ST7735_RED);
+  } else if (!(status & READING_RESPONSE)) {
     if (status & DISPLAY_UPDATE) {  
       display_current();
       set_status(DISPLAY_UPDATE, false);
@@ -623,8 +617,8 @@ void loop() {
       else
         display_forecast(forecasts+t-1);
     }
+    tft.fillRect(tft.width()/2-2, 0, 4, 4, ST7735_GREEN);
   }
-  tft.fillRect(tft.width()/2-2, 0, 4, 4, (status & READING_RESPONSE)? ST7735_RED: ST7735_GREEN);
 
   if (fade == dim && analogRead(A5) == 1023) {
     bright_on = now;
@@ -633,7 +627,7 @@ void loop() {
   } else if (now > bright_on + TWO_MINS && fade < dim) {
     analogWrite(TFT_LED, fade++);
     if (fade == dim)
-      set_status(DISPLAY_UPDATE, (now / 10000) % 6 != 0);
+      set_status(DISPLAY_UPDATE, true);
     else
       delay(25);
   }
