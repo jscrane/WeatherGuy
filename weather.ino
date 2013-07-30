@@ -75,7 +75,7 @@ static int val_len(int b)
 }
 
 // from Adafruit's spitftbitmap ST7735 example
-void bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
+int bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
   int      bmpWidth, bmpHeight;   // W+H in pixels
   uint8_t  bmpDepth;              // Bit depth (currently must be 24)
   uint32_t bmpImageoffset;        // Start of image data in file
@@ -86,7 +86,7 @@ void bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
   uint8_t  r, g, b;
   uint32_t pos = 0;
 
-  if((x >= tft.width()) || (y >= tft.height())) return;
+  if((x >= tft.width()) || (y >= tft.height())) return -1;
 
 #ifdef DEBUG
   uint32_t startTime = millis();
@@ -99,14 +99,14 @@ void bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
     out.print(filename);
     out.print(' ');
     out.println(res);
-    return;
+    return res;
   }
 
   // Parse BMP header
   uint32_t currPos = 0;
   if (read16(currPos) != 0x4D42) {
     out.println(F("Unknown BMP signature"));
-    return;
+    return -1;
   }
 #ifdef DEBUG  
   out.print(F("File size: "));
@@ -130,7 +130,7 @@ void bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
   bmpHeight = read32(currPos);
   if (read16(currPos) != 1) {
     out.println(F("# planes -- must be '1'"));
-    return;
+    return -1;
   }
   bmpDepth = read16(currPos); // bits per pixel
 #ifdef DEBUG
@@ -140,7 +140,7 @@ void bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
   if((bmpDepth != 24) || (read32(currPos) != 0)) {
     // 0 = uncompressed
     out.println(F("BMP format not recognized."));
-    return;
+    return -1; 
   }
   
 #ifdef DEBUG
@@ -209,6 +209,16 @@ void bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
   out.print(millis() - startTime);
   out.println(F(" ms"));
 #endif
+  return FR_OK;
+}
+
+static void bmp_draw_retrying(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y)
+{
+  for (int i = 0; i < 3; i++) {
+    int res = bmp_draw(buf, bufsiz, filename, x, y);
+    if (res != FR_DISK_ERR)
+      return;
+  }
 }
 
 // These read 16- and 32-bit types from the SD card file.
@@ -309,13 +319,13 @@ static void display_current() {
   }
 
   tft.setCursor(centre_text(city, 80, 1), 30);
-  tft.print(city);
-  bmp_draw(xmlbuf, sizeof(xmlbuf), condition_code, 54, 38);  
+  tft.println(city);
+  bmp_draw_retrying(xmlbuf, sizeof(xmlbuf), condition_code, 54, 38);
   tft.setCursor(centre_text(condition_text, 80, 1), 90);
   tft.print(condition_text);
 
   // http://www.iquilezles.org/www/articles/sincos/sincos.htm
-  int rad = 50, cx = 80, cy = 64;
+  int rad = 55, cx = 80, cy = 64;
   const float a = 0.999847695, b = 0.017452406;
   // wind dir is azimuthal angle with N at 0
   float s = 1.0, c = 0.0;
@@ -358,7 +368,7 @@ static void display_forecast(struct forecast *f)
   tft.setTextSize(1);
   tft.setCursor(centre_text(f->date, 80, 1), 30);
   tft.println(f->date);
-  bmp_draw(xmlbuf, sizeof(xmlbuf), f->code, 54, 38);  
+  bmp_draw_retrying(xmlbuf, sizeof(xmlbuf), f->code, 54, 38);  
   tft.setCursor(centre_text(f->text, 80, 1), 90);
   tft.print(f->text);  
 }
