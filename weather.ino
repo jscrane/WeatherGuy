@@ -71,7 +71,9 @@ static int val_len(int b)
   if (b >= 1000) return 4;
   if (b >= 100) return 3;
   if (b >= 10) return 2;
-  return 1;
+  if (b >= 0) return 1;
+  if (b > -10) return 2;
+  return 3;
 }
 
 // from Adafruit's spitftbitmap ST7735 example
@@ -399,6 +401,16 @@ static void read_str(const char *from, uint16_t fromlen, char *to, uint16_t tole
 static int read_int(const char *from, int curr)
 {
   int val = atoi(from);
+  int n = val_len(val);
+  // bodge for round-up (saves atof)
+  if (from[n] == '.') {
+    int r = from[n+1] - '0';
+    if (r > 4)
+      if (val >= 0) 
+        val++;
+      else 
+        val--;
+  }
   if (val != curr)
     set_status(DISPLAY_UPDATE, true);
   return val;
