@@ -19,7 +19,7 @@
 #define ETHER_CS 10
 
 byte Ethernet::buffer[567];  // 567 is minimum buffer size to avoid losing data
-static uint32_t next_fetch, bright_on;
+static uint32_t next_fetch, last_fetch, bright_on;
 
 char website[] PROGMEM = "weather.yahooapis.com";
 
@@ -43,10 +43,11 @@ byte wind_speed, atmos_humidity;
 int8_t atmos_rising, condition_temp, wind_chill;
 uint16_t wind_direction, atmos_pressure;
 
+#define FORECASTS 5
 struct forecast {
   int8_t low, high;
   char code[3], day[4], text[20], date[7];
-} forecasts[5];
+} forecasts[FORECASTS];
 struct forecast *fcast = forecasts;
   
 //#define DEBUG
@@ -214,15 +215,6 @@ int bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
   return FR_OK;
 }
 
-static void bmp_draw_retrying(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y)
-{
-  for (int i = 0; i < 3; i++) {
-    int res = bmp_draw(buf, bufsiz, filename, x, y);
-    if (res != FR_DISK_ERR)
-      return;
-  }
-}
-
 // These read 16- and 32-bit types from the SD card file.
 // BMP data is stored little-endian, Arduino is little-endian too.
 // May need to reverse subscript order if porting elsewhere.
@@ -322,7 +314,7 @@ static void display_current() {
 
   tft.setCursor(centre_text(city, 80, 1), 30);
   tft.println(city);
-  bmp_draw_retrying(xmlbuf, sizeof(xmlbuf), condition_code, 54, 38);
+  bmp_draw(xmlbuf, sizeof(xmlbuf), condition_code, 54, 38);
   tft.setCursor(centre_text(condition_text, 80, 1), 90);
   tft.print(condition_text);
 
@@ -370,7 +362,7 @@ static void display_forecast(struct forecast *f)
   tft.setTextSize(1);
   tft.setCursor(centre_text(f->date, 80, 1), 30);
   tft.println(f->date);
-  bmp_draw_retrying(xmlbuf, sizeof(xmlbuf), f->code, 54, 38);  
+  bmp_draw(xmlbuf, sizeof(xmlbuf), f->code, 54, 38);  
   tft.setCursor(centre_text(f->text, 80, 1), 90);
   tft.print(f->text);  
 }
@@ -437,10 +429,9 @@ void xml_callback(uint8_t statusflags, char *tagName, uint16_t tagNameLen, char 
       set_status(IN_FORECAST, strcontains(tagName, PSTR(":forecast")));
     }
   } else if (statusflags & STATUS_END_TAG) {
-    if (strequals(tagName, PSTR("/rss"))) {
-      set_status(DISPLAY_UPDATE, true);
+    if (strequals(tagName, PSTR("/rss")))
       fcast = forecasts;
-    } else if (status & IN_FORECAST)
+    else if (status & IN_FORECAST)
       fcast++;
   } else if (statusflags & STATUS_ATTR_TEXT) {
     if (status & IN_LOCATION) {
@@ -536,8 +527,12 @@ void setup () {
   tft.setTextColor(ST7735_WHITE);
   tft.setCursor(0,0);
   analogWrite(TFT_LED, 0);
-  
+
+#ifdef DEBUG  
   out.println(freeMemory());
+#else
+  out.println(F("Weather Guy (c) 2013 Steve"));
+#endif
 
   // initialise the SD card and read the config file
   int res = PFFS.begin(SD_CS, rx, tx);
@@ -578,16 +573,15 @@ void setup () {
     out.println(F("Ethernet!"));
     halt();
   }
-
   if (!ether.dhcpSetup()) {
     out.println(F("DHCP!"));
     halt();
   }
-
   if (!ether.dnsLookup(website)) {
     out.println(F("DNS!"));
     halt();
   }
+  ether.persistTcpConnection(true);
 
   xml.init(xmlbuf, sizeof(xmlbuf), xml_callback);
   
@@ -612,7 +606,7 @@ static void net_callback(byte status, word off, word len) {
   }
 }
 
-#define TWO_MINS 120000L
+#define SECONDS(x) ((x)*1000L)
 
 void loop() {
   ether.packetLoop(ether.packetReceive());
@@ -620,7 +614,7 @@ void loop() {
   uint32_t now = millis();
   if (now > next_fetch) {
     next_fetch = now + update_interval * 1000L;
-    ether.persistTcpConnection(true);
+    last_fetch = now;
     strcpy_P((char *)xmlbuf, PSTR("?w="));
     strcat((char *)xmlbuf, city_code);
     strcat_P((char *)xmlbuf, PSTR("&u="));
@@ -633,20 +627,20 @@ void loop() {
       display_current();
       set_status(DISPLAY_UPDATE, false);
     } else if ((now % 10000) == 0 && fade != dim) {
-      uint32_t t = (now / 10000) % 6;
-      if (t == 0)
-        display_current();
-      else
-        display_forecast(forecasts+t-1);
+      uint32_t t = (now / 10000) % FORECASTS;
+      display_forecast(forecasts+t);
     }
     tft.fillRect(tft.width()/2-2, 0, 4, 4, ST7735_GREEN);
+  } else if (now > last_fetch + SECONDS(60)) {
+    // FIXME: can we do anything else here? reset the ethernet card maybe?
+    set_status(READING_RESPONSE, false);
   }
 
   if (fade == dim && analogRead(A5) == 1023) {
     bright_on = now;
     fade = bright;
     analogWrite(TFT_LED, fade);
-  } else if (now > bright_on + TWO_MINS && fade < dim) {
+  } else if (now > bright_on + SECONDS(2*FORECASTS*10) && fade < dim) {
     analogWrite(TFT_LED, fade++);
     if (fade == dim)
       set_status(DISPLAY_UPDATE, true);
