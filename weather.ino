@@ -626,8 +626,8 @@ void loop() {
     if (status & DISPLAY_UPDATE) {  
       display_current();
       set_status(DISPLAY_UPDATE, false);
-    } else if ((now % 10000) == 0 && fade != dim) {
-      uint32_t t = (now / 10000) % FORECASTS;
+    } else if (fade != dim && ((now - bright_on) % 10000) == 0) {
+      uint32_t t = ((now - bright_on) / 10000) % FORECASTS;
       display_forecast(forecasts+t);
     }
     tft.fillRect(tft.width()/2-2, 0, 4, 4, ST7735_GREEN);
