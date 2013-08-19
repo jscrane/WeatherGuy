@@ -23,10 +23,17 @@ static uint32_t next_fetch, last_fetch, bright_on;
 
 char website[] PROGMEM = "weather.yahooapis.com";
 
-byte xmlbuf[90];
+byte xmlbuf[75];
 TinyXML xml;
 
 Adafruit_ST7735 tft(TFT_CS, TFT_RS, TFT_RST);
+  
+//#define DEBUG
+#ifdef DEBUG
+Print &out = Serial;
+#else
+Print &out = tft;
+#endif
 
 #define IN_LOCATION 1
 #define IN_UNITS 2
@@ -49,13 +56,12 @@ struct forecast {
   char code[3], day[4], text[20], date[7];
 } forecasts[FORECASTS];
 struct forecast *fcast = forecasts;
-  
-//#define DEBUG
-#ifdef DEBUG
-Print &out = Serial;
-#else
-Print &out = tft;
-#endif
+
+volatile uint32_t redline = 0xffff;
+
+static boolean chkoverflow() {
+  return redline != 0xffff;
+}
 
 static int centre_text(const char *s, int x, int size)
 {
@@ -124,10 +130,12 @@ int bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
   out.println(bmpImageoffset, DEC);
 #endif
   // Read DIB header
-  uint32_t header_size = read32(currPos);
 #ifdef DEBUG
+  uint32_t header_size = read32(currPos);
   out.print(F("Header size: ")); 
   out.println(header_size);
+#else
+  (void)read32(currPos);
 #endif
   bmpWidth  = read32(currPos);
   bmpHeight = read32(currPos);
@@ -377,17 +385,15 @@ static void set_status(int bit, boolean cond)
 
 static void read_str(const char *from, uint16_t fromlen, char *to, uint16_t tolen)
 {
-  char buf[20];
-  if (fromlen >= sizeof(buf))
-    fromlen = sizeof(buf) - 1;
-  if (fromlen > tolen)
-    fromlen = tolen - 1;
-  memcpy(buf, from, fromlen);
-  buf[fromlen] = 0;
-  if (strcmp(to, buf) != 0) {
-    strncpy(to, buf, tolen); 
+  uint16_t len = tolen < fromlen? tolen: fromlen;
+  if (strncmp(to, from, len) != 0) {
+    strncpy(to, from, len);
+    if (len == tolen)
+      to[len-1] = '\0';
+    else
+      to[len] = '\0';
     set_status(DISPLAY_UPDATE, true);
-  }
+  }    
 }
 
 static int read_int(const char *from, int curr)
@@ -397,11 +403,12 @@ static int read_int(const char *from, int curr)
   // bodge for round-up (saves atof)
   if (from[n] == '.') {
     int r = from[n+1] - '0';
-    if (r > 4)
+    if (r > 4) {
       if (val >= 0) 
         val++;
       else 
         val--;
+    }
   }
   if (val != curr)
     set_status(DISPLAY_UPDATE, true);
@@ -609,9 +616,24 @@ static void net_callback(byte status, word off, word len) {
 #define SECONDS(x) ((x)*1000L)
 
 void loop() {
-  ether.packetLoop(ether.packetReceive());
 
   uint32_t now = millis();
+  ether.packetLoop(ether.packetReceive());
+
+  if (fade == dim) {
+    if (analogRead(A5) == 1023) {
+      bright_on = now;
+      fade = bright;
+      analogWrite(TFT_LED, fade);
+    }
+  } else if (now > bright_on + SECONDS(2*FORECASTS*10)) {
+    analogWrite(TFT_LED, fade++);
+    if (fade == dim)
+      set_status(DISPLAY_UPDATE, true);
+    else
+      delay(25);
+  }
+  
   if (now > next_fetch) {
     next_fetch = now + update_interval * 1000L;
     last_fetch = now;
@@ -621,7 +643,7 @@ void loop() {
     strcat((char *)xmlbuf, units);
     ether.browseUrl(PSTR("/forecastrss"), (char *)xmlbuf, website, PSTR("Accept: text/xml\r\n"), net_callback);
     set_status(READING_RESPONSE, true);
-    tft.fillRect(tft.width()/2-2, 0, 4, 4, ST7735_RED);
+    tft.fillRect(tft.width()/2-2, 0, 4, 4, chkoverflow()? ST7735_BLACK: ST7735_RED);
   } else if (!(status & READING_RESPONSE)) {
     if (status & DISPLAY_UPDATE) {  
       display_current();
@@ -630,22 +652,10 @@ void loop() {
       uint32_t t = ((now - bright_on) / 10000) % FORECASTS;
       display_forecast(forecasts+t);
     }
-    tft.fillRect(tft.width()/2-2, 0, 4, 4, ST7735_GREEN);
+    tft.fillRect(tft.width()/2-2, 0, 4, 4, chkoverflow()? ST7735_BLACK: ST7735_GREEN);
   } else if (now > last_fetch + SECONDS(60)) {
     // FIXME: can we do anything else here? reset the ethernet card maybe?
     set_status(READING_RESPONSE, false);
-  }
-
-  if (fade == dim && analogRead(A5) == 1023) {
-    bright_on = now;
-    fade = bright;
-    analogWrite(TFT_LED, fade);
-  } else if (now > bright_on + SECONDS(2*FORECASTS*10) && fade < dim) {
-    analogWrite(TFT_LED, fade++);
-    if (fade == dim)
-      set_status(DISPLAY_UPDATE, true);
-    else
-      delay(25);
   }
 }
 
