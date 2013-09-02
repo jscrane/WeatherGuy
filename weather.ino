@@ -19,7 +19,7 @@
 #define ETHER_CS 10
 
 byte Ethernet::buffer[567];  // 567 is minimum buffer size to avoid losing data
-static uint32_t next_fetch, last_fetch, bright_on;
+uint32_t last_fetch, bright_on;
 
 char website[] PROGMEM = "weather.yahooapis.com";
 
@@ -56,12 +56,6 @@ struct forecast {
   char code[3], day[4], text[20], date[7];
 } forecasts[FORECASTS];
 struct forecast *fcast = forecasts;
-
-volatile uint32_t redline = 0xffff;
-
-static boolean chkoverflow() {
-  return redline != 0xffff;
-}
 
 static int centre_text(const char *s, int x, int size)
 {
@@ -594,6 +588,9 @@ void setup () {
   
   analogWrite(TFT_LED, dim);
   fade = dim;
+  
+  // force first update
+  last_fetch = -update_interval * 1000L;
 }
 
 static void net_callback(byte status, word off, word len) {
@@ -613,8 +610,6 @@ static void net_callback(byte status, word off, word len) {
   }
 }
 
-#define SECONDS(x) ((x)*1000L)
-
 void loop() {
 
   uint32_t now = millis();
@@ -626,7 +621,7 @@ void loop() {
       fade = bright;
       analogWrite(TFT_LED, fade);
     }
-  } else if (now > bright_on + SECONDS(2*FORECASTS*10)) {
+  } else if (now - bright_on > 2*FORECASTS*10000L) {
     analogWrite(TFT_LED, fade++);
     if (fade == dim)
       set_status(DISPLAY_UPDATE, true);
@@ -634,8 +629,7 @@ void loop() {
       delay(25);
   }
   
-  if (now > next_fetch) {
-    next_fetch = now + update_interval * 1000L;
+  if (now - last_fetch > update_interval * 1000L) {
     last_fetch = now;
     strcpy_P((char *)xmlbuf, PSTR("?w="));
     strcat((char *)xmlbuf, city_code);
@@ -643,7 +637,7 @@ void loop() {
     strcat((char *)xmlbuf, units);
     ether.browseUrl(PSTR("/forecastrss"), (char *)xmlbuf, website, PSTR("Accept: text/xml\r\n"), net_callback);
     set_status(READING_RESPONSE, true);
-    tft.fillRect(tft.width()/2-2, 0, 4, 4, chkoverflow()? ST7735_BLACK: ST7735_RED);
+    tft.fillRect(tft.width()/2-2, 0, 4, 4, ST7735_RED);
   } else if (!(status & READING_RESPONSE)) {
     if (status & DISPLAY_UPDATE) {  
       display_current();
@@ -652,8 +646,8 @@ void loop() {
       uint32_t t = ((now - bright_on) / 10000) % FORECASTS;
       display_forecast(forecasts+t);
     }
-    tft.fillRect(tft.width()/2-2, 0, 4, 4, chkoverflow()? ST7735_BLACK: ST7735_GREEN);
-  } else if (now > last_fetch + SECONDS(60)) {
+    tft.fillRect(tft.width()/2-2, 0, 4, 4, ST7735_GREEN);
+  } else if (now - last_fetch > 60000L) {
     // FIXME: can we do anything else here? reset the ethernet card maybe?
     set_status(READING_RESPONSE, false);
   }
