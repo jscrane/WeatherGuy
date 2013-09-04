@@ -325,7 +325,7 @@ static void display_current() {
   const float a = 0.999847695, b = 0.017452406;
   // wind dir is azimuthal angle with N at 0
   float s = 1.0, c = 0.0;
-  for (uint16_t i = 0; i < wind_direction; i++) {
+  for (uint16_t i = 1; i < wind_direction; i++) {
     const float ns = a*s + b*c;
     const float nc = a*c - b*s;
     c = nc;
@@ -590,7 +590,7 @@ void setup () {
   fade = dim;
   
   // force first update
-  last_fetch = -update_interval * 1000L;
+  last_fetch = -update_interval;
 }
 
 static void net_callback(byte status, word off, word len) {
@@ -612,7 +612,7 @@ static void net_callback(byte status, word off, word len) {
 
 void loop() {
 
-  uint32_t now = millis();
+  uint32_t now = millis() / 1000L;
   ether.packetLoop(ether.packetReceive());
 
   if (fade == dim) {
@@ -621,7 +621,7 @@ void loop() {
       fade = bright;
       analogWrite(TFT_LED, fade);
     }
-  } else if (now - bright_on > 2*FORECASTS*10000L) {
+  } else if (now - bright_on > 10*FORECASTS) {
     analogWrite(TFT_LED, fade++);
     if (fade == dim)
       set_status(DISPLAY_UPDATE, true);
@@ -629,7 +629,7 @@ void loop() {
       delay(25);
   }
   
-  if (now - last_fetch > update_interval * 1000L) {
+  if (now - last_fetch > update_interval) {
     last_fetch = now;
     strcpy_P((char *)xmlbuf, PSTR("?w="));
     strcat((char *)xmlbuf, city_code);
@@ -642,12 +642,13 @@ void loop() {
     if (status & DISPLAY_UPDATE) {  
       display_current();
       set_status(DISPLAY_UPDATE, false);
-    } else if (fade != dim && ((now - bright_on) % 10000) == 0) {
-      uint32_t t = ((now - bright_on) / 10000) % FORECASTS;
+    } else if (fade != dim && ((now - bright_on) % 5) == 0) {
+      uint32_t t = ((now - bright_on) / 5) % FORECASTS;
       display_forecast(forecasts+t);
+      delay(2000);
     }
     tft.fillRect(tft.width()/2-2, 0, 4, 4, ST7735_GREEN);
-  } else if (now - last_fetch > 60000L) {
+  } else if (now - last_fetch > 60) {
     // FIXME: can we do anything else here? reset the ethernet card maybe?
     set_status(READING_RESPONSE, false);
   }
