@@ -23,9 +23,6 @@ uint32_t last_fetch, bright_on;
 
 char website[] PROGMEM = "weather.yahooapis.com";
 
-byte xmlbuf[75];
-TinyXML xml;
-
 Adafruit_ST7735 tft(TFT_CS, TFT_RS, TFT_RST);
   
 //#define DEBUG
@@ -53,9 +50,12 @@ uint16_t wind_direction, atmos_pressure;
 #define FORECASTS 5
 struct forecast {
   int8_t low, high;
-  char code[3], day[4], text[20], date[7];
+  char code[3], day[4], text[24], date[7];
 } forecasts[FORECASTS];
 struct forecast *fcast = forecasts;
+
+byte xmlbuf[90];
+TinyXML xml;
 
 static int centre_text(const char *s, int x, int size)
 {
@@ -325,7 +325,7 @@ static void display_current() {
   const float a = 0.999847695, b = 0.017452406;
   // wind dir is azimuthal angle with N at 0
   float s = 1.0, c = 0.0;
-  for (uint16_t i = 1; i < wind_direction; i++) {
+  for (uint16_t i = 0; i < wind_direction; i++) {
     const float ns = a*s + b*c;
     const float nc = a*c - b*s;
     c = nc;
@@ -377,7 +377,7 @@ static void set_status(int bit, boolean cond)
     status &= ~bit;
 }
 
-static void read_str(const char *from, uint16_t fromlen, char *to, uint16_t tolen)
+static void read_str(const char *from, uint16_t fromlen, char *to, uint16_t tolen, bool update = true)
 {
   uint16_t len = tolen < fromlen? tolen: fromlen;
   if (strncmp(to, from, len) != 0) {
@@ -386,11 +386,12 @@ static void read_str(const char *from, uint16_t fromlen, char *to, uint16_t tole
       to[len-1] = '\0';
     else
       to[len] = '\0';
-    set_status(DISPLAY_UPDATE, true);
+    if (update)
+      set_status(DISPLAY_UPDATE, true);
   }    
 }
 
-static int read_int(const char *from, int curr)
+static int read_int(const char *from, int curr, bool update = true)
 {
   int val = atoi(from);
   int n = val_len(val);
@@ -404,7 +405,7 @@ static int read_int(const char *from, int curr)
         val--;
     }
   }
-  if (val != curr)
+  if (val != curr && update)
     set_status(DISPLAY_UPDATE, true);
   return val;
 }
@@ -468,17 +469,17 @@ void xml_callback(uint8_t statusflags, char *tagName, uint16_t tagNameLen, char 
         condition_temp = read_int(data, condition_temp);
     } else if (status & IN_FORECAST) {
       if (strequals(tagName, PSTR("day")))
-        read_str(data, dlen, fcast->day, sizeof(fcast->day));
+        read_str(data, dlen, fcast->day, sizeof(fcast->day), false);
       else if (strequals(tagName, PSTR("low")))
-        fcast->low = read_int(data, fcast->low);
+        fcast->low = read_int(data, fcast->low, false);
       else if (strequals(tagName, PSTR("high")))
-        fcast->high = read_int(data, fcast->high);
+        fcast->high = read_int(data, fcast->high, false);
       else if (strequals(tagName, PSTR("code")))
-        read_str(data, dlen, fcast->code, sizeof(fcast->code));
+        read_str(data, dlen, fcast->code, sizeof(fcast->code), false);
       else if (strequals(tagName, PSTR("text")))
-        read_str(data, dlen, fcast->text, sizeof(fcast->text));
+        read_str(data, dlen, fcast->text, sizeof(fcast->text), false);
       else if (strequals(tagName, PSTR("date")))
-        read_str(data, dlen, fcast->date, sizeof(fcast->date));
+        read_str(data, dlen, fcast->date, sizeof(fcast->date), false);
     }
   } else if (statusflags & STATUS_ERROR) {
 #ifdef DEBUG
@@ -529,26 +530,27 @@ void setup () {
   tft.setCursor(0,0);
   analogWrite(TFT_LED, 0);
 
-#ifdef DEBUG  
+  out.println(F("Weather Guy (c)2013 Steve"));
   out.println(freeMemory());
-#else
-  out.println(F("Weather Guy (c) 2013 Steve"));
-#endif
 
   // initialise the SD card and read the config file
+  out.print(F("PFFS"));
   int res = PFFS.begin(SD_CS, rx, tx);
   if (res != FR_OK) {
-    out.print(F("PFFS!"));
+    out.print('!');
     out.println(res);
     halt();
   }
+  out.println();
+  out.print(F("Config"));
   strcpy_P((char *)xmlbuf, PSTR("config"));
   res = PFFS.open_file((char *)xmlbuf);
   if (res != FR_OK) {
-    out.print(F("config!"));
+    out.print('!');
     out.println(res);
     halt();
   }
+  out.println();
   int nread;
   res = PFFS.read_file((char *)xmlbuf, sizeof(xmlbuf), &nread);
   if (res != FR_OK) {
@@ -569,17 +571,22 @@ void setup () {
   strcpy(units, p);
   
   // ethernet interface mac address, must be unique on the LAN
+  out.print(F("Ethernet"));
   byte mac[] = { 0x74, 0x69, 0x69, 0x2d, 0x30, 0x31 };
   if (ether.begin(sizeof Ethernet::buffer, mac, ETHER_CS) == 0) {
-    out.println(F("Ethernet!"));
+    out.println('!');
     halt();
   }
+  out.println();
+  out.print(F("DHCP"));
   if (!ether.dhcpSetup()) {
-    out.println(F("DHCP!"));
+    out.println('!');
     halt();
   }
+  out.println();
+  out.print(F("DNS"));
   if (!ether.dnsLookup(website)) {
-    out.println(F("DNS!"));
+    out.println('!');
     halt();
   }
   ether.persistTcpConnection(true);
