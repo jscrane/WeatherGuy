@@ -272,6 +272,16 @@ static const __FlashStringHelper *cardinal_direction(short deg)
   return F("NNW");
 }
 
+static void display_unit(const char *unit) {
+  tft.setTextSize(1);
+  tft.print(unit);  
+}
+
+static void display_unit(char unit) {
+  tft.setTextSize(1);
+  tft.print(unit);  
+}
+
 static void display_current() {
   tft.fillScreen(ST7735_WHITE);
   tft.setTextColor(ST7735_BLACK);
@@ -279,16 +289,14 @@ static void display_current() {
   tft.setTextSize(2);
   tft.setCursor(1, 1);
   tft.print(wind_speed);
-  tft.setTextSize(1);
-  tft.print(speed_unit);  
+  display_unit(speed_unit);  
   tft.setCursor(1, 17);
   tft.print(cardinal_direction(wind_direction));
   
   tft.setTextSize(2);
   tft.setCursor(1, tft.height()-16);
   tft.print(condition_temp);
-  tft.setTextSize(1);
-  tft.print(temp_unit);
+  display_unit(temp_unit);
   if (condition_temp != wind_chill) {
     tft.setCursor(1, tft.height()-24);
     tft.print(wind_chill);
@@ -297,15 +305,13 @@ static void display_current() {
   tft.setTextSize(2);
   tft.setCursor(right(val_len(atmos_humidity), tft.width(), 2)-6, tft.height()-16);
   tft.print(atmos_humidity);
-  tft.setTextSize(1);
   tft.setCursor(tft.width()-6, tft.height()-16);  // ???
-  tft.print('%');
+  display_unit('%');
 
   tft.setTextSize(2);
   tft.setCursor(right(val_len(atmos_pressure), tft.width(), 2)-6*strlen(pres_unit), 1);
   tft.print(atmos_pressure);
-  tft.setTextSize(1);
-  tft.print(pres_unit);
+  display_unit(pres_unit);
   if (atmos_rising == 1) {
     tft.setCursor(right(6, tft.width(), 1), 17);
     tft.print(F("rising"));
@@ -321,7 +327,7 @@ static void display_current() {
   tft.print(condition_text);
 
   // http://www.iquilezles.org/www/articles/sincos/sincos.htm
-  int rad = 55, cx = 80, cy = 64;
+  int rad = 60, cx = 80, cy = 64;
   const float a = 0.999847695, b = 0.017452406;
   // wind dir is azimuthal angle with N at 0
   float s = 1.0, c = 0.0;
@@ -332,9 +338,9 @@ static void display_current() {
     s = ns;
   }
   // wind dir rotates clockwise so compensate
-  float ex = cx-rad*c, ey = cy-rad*s;
+  int ex = cx-rad*c, ey = cy-rad*s;
   tft.fillCircle(ex, ey, 3, ST7735_BLACK);
-  tft.drawLine(ex, ey, (3*ex + cx)/4, (3*ey + cy)/4, ST7735_BLACK);
+  tft.drawLine(ex, ey, ex + wind_speed*(cx - ex)/50, ey+wind_speed*(cy-ey)/50, ST7735_BLACK);
 }
 
 static void display_forecast(struct forecast *f)
@@ -644,7 +650,7 @@ void loop() {
     strcat((char *)xmlbuf, units);
     ether.browseUrl(PSTR("/forecastrss"), (char *)xmlbuf, website, PSTR("Accept: text/xml\r\n"), net_callback);
     set_status(READING_RESPONSE, true);
-    tft.fillRect(tft.width()/2-2, 0, 4, 4, ST7735_RED);
+    tft.fillRect(0, tft.height()/2-2, 4, 4, ST7735_RED);
   } else if (!(status & READING_RESPONSE)) {
     if (status & DISPLAY_UPDATE) {  
       display_current();
@@ -654,9 +660,9 @@ void loop() {
       display_forecast(forecasts+t);
       delay(2000);
     }
-    tft.fillRect(tft.width()/2-2, 0, 4, 4, ST7735_GREEN);
+    tft.fillRect(0, tft.height()/2-2, 4, 4, ST7735_GREEN);
   } else if (now - last_fetch > 60) {
-    // FIXME: can we do anything else here? reset the ethernet card maybe?
+    xml.reset();
     set_status(READING_RESPONSE, false);
   }
 }
