@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <avr/pgmspace.h>
+#include <avr/wdt.h>
 
 #define TFT_RST  -1
 #define TFT_RS   5
@@ -52,7 +53,7 @@ struct forecast {
   int8_t low, high;
   char code[3], day[4], text[24], date[7];
 } forecasts[FORECASTS];
-struct forecast *fcast = forecasts;
+byte fcast;
 
 byte xmlbuf[90];
 TinyXML xml;
@@ -438,9 +439,12 @@ void xml_callback(uint8_t statusflags, char *tagName, uint16_t tagNameLen, char 
     }
   } else if (statusflags & STATUS_END_TAG) {
     if (strequals(tagName, PSTR("/rss")))
-      fcast = forecasts;
-    else if (status & IN_FORECAST)
+      fcast = 0;
+    else if (status & IN_FORECAST) {
       fcast++;
+      if (fcast == FORECASTS)
+        fcast = 0;
+    }
   } else if (statusflags & STATUS_ATTR_TEXT) {
     if (status & IN_LOCATION) {
       if (strequals(tagName, PSTR("city")))
@@ -475,17 +479,17 @@ void xml_callback(uint8_t statusflags, char *tagName, uint16_t tagNameLen, char 
         condition_temp = read_int(data, condition_temp);
     } else if (status & IN_FORECAST) {
       if (strequals(tagName, PSTR("day")))
-        read_str(data, dlen, fcast->day, sizeof(fcast->day), false);
+        read_str(data, dlen, forecasts[fcast].day, sizeof(forecasts[fcast].day), false);
       else if (strequals(tagName, PSTR("low")))
-        fcast->low = read_int(data, fcast->low, false);
+        forecasts[fcast].low = read_int(data, forecasts[fcast].low, false);
       else if (strequals(tagName, PSTR("high")))
-        fcast->high = read_int(data, fcast->high, false);
+        forecasts[fcast].high = read_int(data, forecasts[fcast].high, false);
       else if (strequals(tagName, PSTR("code")))
-        read_str(data, dlen, fcast->code, sizeof(fcast->code), false);
+        read_str(data, dlen, forecasts[fcast].code, sizeof(forecasts[fcast].code), false);
       else if (strequals(tagName, PSTR("text")))
-        read_str(data, dlen, fcast->text, sizeof(fcast->text), false);
+        read_str(data, dlen, forecasts[fcast].text, sizeof(forecasts[fcast].text), false);
       else if (strequals(tagName, PSTR("date")))
-        read_str(data, dlen, fcast->date, sizeof(fcast->date), false);
+        read_str(data, dlen, forecasts[fcast].date, sizeof(forecasts[fcast].date), false);
     }
   } else if (statusflags & STATUS_ERROR) {
 #ifdef DEBUG
@@ -604,6 +608,7 @@ void setup () {
   
   // force first update
   last_fetch = -update_interval;
+  wdt_enable(WDTO_8S);
 }
 
 static void net_callback(byte status, word off, word len) {
@@ -652,6 +657,7 @@ void loop() {
     set_status(READING_RESPONSE, true);
     tft.fillRect(0, tft.height()/2-2, 4, 4, ST7735_RED);
   } else if (!(status & READING_RESPONSE)) {
+    wdt_reset();
     if (status & DISPLAY_UPDATE) {  
       display_current();
       set_status(DISPLAY_UPDATE, false);
