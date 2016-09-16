@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<query xmlns:yahoo="http://www.yahooapis.com/v1/base.rng" yahoo:count="1" yahoo:created="2016-09-16T09:21:53Z" yahoo:lang="en-US"><results><channel><yweather:units xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" distance="mi" pressure="in" speed="mph" temperature="F"/><title>Yahoo! Weather - Dublin, DUB, IE</title><link>http://us.rd.yahoo.com/dailynews/rss/weather/Country__Country/*https://weather.yahoo.com/country/state/city-560743/</link><description>Yahoo! Weather for Dublin, DUB, IE</description><language>en-us</language><lastBuildDate>Fri, 16 Sep 2016 10:21 AM IST</lastBuildDate><ttl>60</ttl><yweather:location xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" city="Dublin" country="Ireland" region=" DUB"/><yweather:wind xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" chill="50" direction="270" speed="14"/><yweather:atmosphere xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" humidity="85" pressure="1006.0" rising="0" visibility="16.1"/><yweather:astronomy xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" sunrise="7:3 am" sunset="7:34 pm"/><image><title>Yahoo! Weather</title><width>142</width><height>18</height><link>http://weather.yahoo.com</link><url>http://l.yimg.com/a/i/brand/purplelogo//uh/us/news-wea.gif</url></image><item><title>Conditions for Dublin, DUB, IE at 09:00 AM IST</title><geo:lat xmlns:geo="http://www.w3.org/2003/01/geo/wgs84_pos#">53.334129</geo:lat><geo:long xmlns:geo="http://www.w3.org/2003/01/geo/wgs84_pos#">-6.28636</geo:long><link>http://us.rd.yahoo.com/dailynews/rss/weather/Country__Country/*https://weather.yahoo.com/country/state/city-560743/</link><pubDate>Fri, 16 Sep 2016 09:00 AM IST</pubDate><yweather:condition xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" code="34" date="Fri, 16 Sep 2016 09:00 AM IST" temp="52" text="Mostly Sunny"/><yweather:forecast xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" code="28" date="16 Sep 2016" day="Fri" high="63" low="52" text="Mostly Cloudy"/><yweather:forecast xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" code="28" date="17 Sep 2016" day="Sat" high="63" low="51" text="Mostly Cloudy"/><yweather:forecast xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" code="39" date="18 Sep 2016" day="Sun" high="63" low="52" text="Scattered Showers"/><yweather:forecast xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" code="28" date="19 Sep 2016" day="Mon" high="60" low="50" text="Mostly Cloudy"/><yweather:forecast xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" code="28" date="20 Sep 2016" day="Tue" high="61" low="51" text="Mostly Cloudy"/><yweather:forecast xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" code="28" date="21 Sep 2016" day="Wed" high="60" low="50" text="Mostly Cloudy"/><yweather:forecast xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" code="28" date="22 Sep 2016" day="Thu" high="61" low="51" text="Mostly Cloudy"/><yweather:forecast xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" code="28" date="23 Sep 2016" day="Fri" high="60" low="52" text="Mostly Cloudy"/><yweather:forecast xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" code="12" date="24 Sep 2016" day="Sat" high="63" low="54" text="Rain"/><yweather:forecast xmlns:yweather="http://xml.weather.yahoo.com/ns/rss/1.0" code="28" date="25 Sep 2016" day="Sun" high="64" low="56" text="Mostly Cloudy"/><description>&lt;![CDATA[&lt;img src="http://l.yimg.com/a/i/us/we/52/34.gif"/&gt;
+&lt;BR /&gt;
+&lt;b&gt;Current Conditions:&lt;/b&gt;
+&lt;BR /&gt;Mostly Sunny
+&lt;BR /&gt;
+&lt;BR /&gt;
+&lt;b&gt;Forecast:&lt;/b&gt;
+&lt;BR /&gt; Fri - Mostly Cloudy. High: 63Low: 52
+&lt;BR /&gt; Sat - Mostly Cloudy. High: 63Low: 51
+&lt;BR /&gt; Sun - Scattered Showers. High: 63Low: 52
+&lt;BR /&gt; Mon - Mostly Cloudy. High: 60Low: 50
+&lt;BR /&gt; Tue - Mostly Cloudy. High: 61Low: 51
+&lt;BR /&gt;
+&lt;BR /&gt;
+&lt;a href="http://us.rd.yahoo.com/dailynews/rss/weather/Country__Country/*https://weather.yahoo.com/country/state/city-560743/"&gt;Full Forecast at Yahoo! Weather&lt;/a&gt;
+&lt;BR /&gt;
+&lt;BR /&gt;
+(provided by &lt;a href="http://www.weather.com" &gt;The Weather Channel&lt;/a&gt;)
+&lt;BR /&gt;
+]]&gt;</description><guid isPermaLink="false"/></item></channel></results></query><!-- total: 7 -->
+<!-- prod_bf1_1;paas.yql;queryyahooapiscomproductionbf1;d41e3d98-75e9-11e6-a2c9-d4ae52974741 -->

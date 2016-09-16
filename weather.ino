@@ -22,7 +22,7 @@
 byte Ethernet::buffer[567];  // 567 is minimum buffer size to avoid losing data
 uint32_t last_fetch, bright_on;
 
-char website[] PROGMEM = "weather.yahooapis.com";
+const char website[] PROGMEM = "weather.yahooapis.com";
 
 Adafruit_ST7735 tft(TFT_CS, TFT_RS, TFT_RST);
   
@@ -76,6 +76,25 @@ static int val_len(int b)
   if (b >= 0) return 1;
   if (b > -10) return 2;
   return 3;
+}
+
+// These read 16- and 32-bit types from the SD card file.
+// BMP data is stored little-endian, Arduino is little-endian too.
+// May need to reverse subscript order if porting elsewhere.
+static uint16_t read16(uint32_t &p) {
+  uint16_t result;
+  int n;
+  PFFS.read_file((char *)&result, sizeof(result), &n);
+  p += n;
+  return result;
+}
+
+static uint32_t read32(uint32_t &p) {
+  uint32_t result;
+  int n;
+  PFFS.read_file((char *)&result, sizeof(result), &n);
+  p += n;
+  return result;
 }
 
 // from Adafruit's spitftbitmap ST7735 example
@@ -216,25 +235,6 @@ int bmp_draw(byte *buf, int bufsiz, char *filename, uint8_t x, uint8_t y) {
   out.println(F(" ms"));
 #endif
   return FR_OK;
-}
-
-// These read 16- and 32-bit types from the SD card file.
-// BMP data is stored little-endian, Arduino is little-endian too.
-// May need to reverse subscript order if porting elsewhere.
-static uint16_t read16(uint32_t &p) {
-  uint16_t result;
-  int n;
-  PFFS.read_file((char *)&result, sizeof(result), &n);
-  p += n;
-  return result;
-}
-
-static uint32_t read32(uint32_t &p) {
-  uint32_t result;
-  int n;
-  PFFS.read_file((char *)&result, sizeof(result), &n);
-  p += n;
-  return result;
 }
 
 static const __FlashStringHelper *cardinal_direction(short deg)
